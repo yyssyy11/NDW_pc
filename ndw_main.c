@@ -30,6 +30,7 @@ char databuf[512];
 FILE *fp;
 
 unsigned char name_req[T_NAME_LEN];
+unsigned char name_req_list[15][T_NAME_LEN];
 
 
 struct tinyosndw_data
@@ -214,6 +215,8 @@ ndwd_run(unsigned char* name_req)
 	unsigned char start_mark[] = {0x7e,0x45,0x00};
 	unsigned char *start_p;
 	unsigned char *usbbuf_p;
+	//if(strcmp(name_req, 'test/turn')) //turn req
+
 
 
 
@@ -304,7 +307,7 @@ ndwd_run(unsigned char* name_req)
 					//sprintf(databuf, "[Data]: T: %d  H: %d L: %d CO2: %d ppm\n",temperaturedata,humiditydata,lightdata,co2data);
 					//fprintf(fp, "[Data]: T: %d  H: %d L: %d CO2: %d ppm\n",temperaturedata,humiditydata,lightdata,co2data);
 					//close(fd1);
-					return;
+					//return;
 				}
 
 				usbbuf_p = usbbuf_p + (start_p - usbbuf_p) +38;	//move the pointer to check next packet
@@ -331,8 +334,6 @@ ndwd_run(unsigned char* name_req)
 			//fprintf(fp, "usbbuf_p %d\n start_p %d \n", usbbuf_p, start_p);
 			//fflush(fp);
 
-
-
 		}
 
 		nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
@@ -349,6 +350,26 @@ main(int argc, char **argv)
 
 	arg_count = argc;
 	memset(databuf, 0 , 512);
+
+	strcpy(name_req_list[0], "t3/6/32/h");
+	strcpy(name_req_list[1], "t3/6/32/t");
+	strcpy(name_req_list[2], "t3/6/32/l");
+
+	strcpy(name_req_list[3], "t3/6/33/h");
+	strcpy(name_req_list[4], "t3/6/33/t");
+	strcpy(name_req_list[5], "t3/6/33/l");
+
+	strcpy(name_req_list[6], "t3/9/11/h");
+	strcpy(name_req_list[7], "t3/9/11/t");
+	strcpy(name_req_list[8], "t3/9/11/l");
+
+	strcpy(name_req_list[9], "d10/3/56/h");
+	strcpy(name_req_list[10], "d10/3/56/t");
+	strcpy(name_req_list[11], "d10/3/56/l");
+
+	strcpy(name_req_list[12], "d10/5/42/h");
+	strcpy(name_req_list[13], "d10/5/42/t");
+	strcpy(name_req_list[14], "d10/5/42/l");
 
 	if(argc < 2)
 	{
