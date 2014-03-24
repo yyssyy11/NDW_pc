@@ -25,12 +25,13 @@ Main function of NDW.
 
 
 int arg_count;
-unsigned char padding_mark[18];
+int recv_count;
+char padding_mark[18];
 char databuf[512];
 FILE *fp;
 
-unsigned char name_req[T_NAME_LEN];
-unsigned char name_req_list[15][T_NAME_LEN];
+char name_req[T_NAME_LEN];
+char name_req_list[15][T_NAME_LEN];
 
 
 struct tinyosndw_data
@@ -194,31 +195,106 @@ void printhex_macaddr(void *hex, int len, char *tag)
 }
 
 
+void
+tinyos_recv(int fd1)
+{
+	int nread;
+	 char usbbuf[1024];
+	 char *start_p;
+	 char *usbbuf_p;
+	 char start_mark[] = {0x7e,0x45,0x00};
+
+	struct tinyosndw_data *tinyosndwrecv_data;
+	tinyosndwrecv_data = (struct tinyosndw_data*) malloc(sizeof(*tinyosndwrecv_data));
+
+	memset(usbbuf,0,1024);
+	nread = read(fd1, usbbuf, 1024);//读USB串口
+	printhex_macaddr(usbbuf, nread, " ");
+	printf("\n");
+	usbbuf_p = usbbuf;
+
+	//fprintf(fp, "nodecount loop %d!\n", nodecount);
+	//fflush(fp);
+
+	//printf("usbbuf_p %d\n", usbbuf_p);
+
+
+	while(*usbbuf_p == 0)
+		usbbuf_p++;
+
+	//printf("usbbuf_p++ %d\n", usbbuf_p);
+
+	start_p = strstr(usbbuf_p, start_mark);
+
+	//printf("usbbuf_p %d\n start_p %d \n", usbbuf_p, start_p);
+
+	while(start_p)
+	{
+		fprintf(fp, "got a pkt! len = %x\n", *(start_p+7));
+		fflush(fp);
+
+		if (*(start_p+7) == 0x1c)	//a data packet coming, resolve it!
+		{
+			fprintf(fp, "got a pkt!\n");
+			fflush(fp);
+			//printf("Resolve a 26 bytes pkt.\n");
+			//printhex_macaddr(start_p, 39, " ");
+			//printf("\n");
+
+			memcpy(tinyosndwrecv_data, start_p + 10, sizeof(*tinyosndwrecv_data));
+
+			if(tinyosndwrecv_data->type == NDW_DATA_TYPE_RSP)	//a DATA packet RSP
+			{
+				printf("\n%s : %s\n\n", name_req, tinyosndwrecv_data->buf);
+				recv_count++;
+				//return;
+			}
+
+			usbbuf_p = usbbuf_p + (start_p - usbbuf_p) +38;	//move the pointer to check next packet
+		}
+
+		if (*(start_p+7) == 0x0e)	// beacon packet
+		{
+			usbbuf_p = usbbuf_p + (start_p - usbbuf_p) + 25;	//move the pointer to check next packet
+		}
+
+		usbbuf_p++;
+
+		if(usbbuf_p - 1 == start_p)	//in case a bug
+			break;
+
+		//if(usbbuf_p - usbbuf > 256)	//in case a bug
+			//break;
+
+		fprintf(fp, "while(start_p) %d!\n", usbbuf_p - usbbuf);
+		fflush(fp);
+
+		start_p = strstr((char*)usbbuf_p, (char*)start_mark);	//search next start_mark
+
+		//fprintf(fp, "usbbuf_p %d\n start_p %d \n", usbbuf_p, start_p);
+		//fflush(fp);
+
+	}
+}
+
+
 /**
  * Run the main loop of the ndw 
  */
 void
-ndwd_run(unsigned char* name_req)
+ndwd_run(char* name_req)
 {
-	//int i;
-	//int ret = 0;
 
-	int fd1,nset1,nread,nodecount;
+	int fd1,nset1,nread,count;
 	uint16_t crcres;
 
-	unsigned char usbbuf[1024];
+	
 	unsigned char test[] = {
 		0x7e,0x44,0x26,0x00,0x00,0x00,0x00,0x00,0x1c,0x22,0x03,
 		0x01,0x00,0x01,0x00,0x74,0x65,0x73,0x74,0x64,0x00,0x2d,0x01,0x01,0x00,0xff,0xff,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 		0xff,0xff,0x7e};
 
-	unsigned char start_mark[] = {0x7e,0x45,0x00};
-	unsigned char *start_p;
-	unsigned char *usbbuf_p;
-	//if(strcmp(name_req, 'test/turn')) //turn req
-
-
-
+	recv_count = 0;
 
 	fd1 = open("/dev/ttyUSB0", O_RDWR|O_NONBLOCK);//打开串口
 	if (fd1 == -1)
@@ -231,113 +307,89 @@ ndwd_run(unsigned char* name_req)
 	struct tinyosndw_data *tinyosndwsend_data;
 	tinyosndwsend_data = (struct tinyosndw_data*) malloc(sizeof(*tinyosndwsend_data));
 
-	struct tinyosndw_data *tinyosndwrecv_data;
-	tinyosndwrecv_data = (struct tinyosndw_data*) malloc(sizeof(*tinyosndwrecv_data));
+	memset(tinyosndwsend_data,0,sizeof(*tinyosndwsend_data));
 
-	memset(tinyosndwsend_data,0,sizeof(*tinyosndwrecv_data));
-
-	//initial the tinyosndwsend_data
-	strcpy((char*)tinyosndwsend_data->name, (char*)name_req);
-
-
-	tinyosndwsend_data->type = NDW_DATA_TYPE_REQ;	//default
-
-	memcpy(test+11,tinyosndwsend_data,sizeof(*tinyosndwsend_data));	//fill the buf ,send to usb
-
-	crcres = crccal(test+1, sizeof(test)-4);	//calculate the crc value of "test"
-
-	test[sizeof(test)-3] = crcres;	//add the crc value to "test" packet
-	test[sizeof(test)-2] = crcres>>8; 
-
-	//printhex_macaddr(test, sizeof(test), " ");	//for debug
-	//printf("\n");
-
-	nread = write(fd1, test, sizeof(test));	//send the first req
-	//printf("nr %d\n", nread);
-	//if(nread > 0)
-		////printf("\nSend a REQ to the Serial Port ......\nWaiting for the data......\n");
-
-	for(nodecount = 0; nodecount<100; nodecount++)
-	{
-		usleep(300000);	//wait for the data
-		memset(usbbuf,0,1024);
-		nread = read(fd1, usbbuf, 1024);//读USB串口
-		printhex_macaddr(usbbuf, nread, " ");
-		printf("\n");
-		usbbuf_p = usbbuf;
-
-		fprintf(fp, "nodecount loop %d!\n", nodecount);
-		fflush(fp);
-
-		//printf("usbbuf_p %d\n", usbbuf_p);
-
-
-		while(*usbbuf_p == 0)
-			usbbuf_p++;
-
-		//printf("usbbuf_p++ %d\n", usbbuf_p);
-
-		start_p = strstr(usbbuf_p, start_mark);
-
-		//printf("usbbuf_p %d\n start_p %d \n", usbbuf_p, start_p);
-
-		while(start_p)
+	if(strcmp(name_req, "test/turn") == 0)
+	{//turn
+		for(count = 0; count <500; count++)
 		{
-			fprintf(fp, "got a pkt! len = %x\n", *(start_p+7));
+			strcpy((char*)tinyosndwsend_data->name, name_req_list[count%15]);	//fill the name
+			printf("%s\n", name_req_list[count%15]);
+
+			tinyosndwsend_data->type = NDW_DATA_TYPE_REQ;	//default
+			memcpy(test+11,tinyosndwsend_data,sizeof(*tinyosndwsend_data));	//fill the buf ,send to usb
+			crcres = crccal(test+1, sizeof(test)-4);	//calculate the crc value of "test"
+
+			test[sizeof(test)-3] = crcres;	//add the crc value to "test" packet
+			test[sizeof(test)-2] = crcres>>8; 
+
+			//printhex_macaddr(test, sizeof(test), " ");	//for debug
+			//printf("\n");
+			
+			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
+			usleep(300000);	//wait for the data  us
+			tinyos_recv(fd1);
+
+			fprintf(fp, "Send count: %d\nRecv count %d\n", count, recv_count);
 			fflush(fp);
-
-			if (*(start_p+7) == 0x1c)	//a data packet coming, resolve it!
-			{
-				fprintf(fp, "got a pkt!\n");
-				fflush(fp);
-				//printf("Resolve a 26 bytes pkt.\n");
-				//printhex_macaddr(start_p, 39, " ");
-				//printf("\n");
-
-				memcpy(tinyosndwrecv_data, start_p + 10, sizeof(*tinyosndwrecv_data));
-
-				if(tinyosndwrecv_data->type == NDW_DATA_TYPE_RSP)	//a DATA packet RSP
-				{
-					printf("\n%s : %s\n\n", name_req, tinyosndwrecv_data->buf);
-
-
-					//printf("\nData type: RSP\n");
-					//printf("Data name: %s\n", argvmark[1]);
-					//printf("[Data]: T: %d  H: %d L: %d CO2: %d ppm\n",temperaturedata,humiditydata,lightdata,co2data);
-					//sprintf(databuf, "[Data]: T: %d  H: %d L: %d CO2: %d ppm\n",temperaturedata,humiditydata,lightdata,co2data);
-					//fprintf(fp, "[Data]: T: %d  H: %d L: %d CO2: %d ppm\n",temperaturedata,humiditydata,lightdata,co2data);
-					//close(fd1);
-					//return;
-				}
-
-				usbbuf_p = usbbuf_p + (start_p - usbbuf_p) +38;	//move the pointer to check next packet
-			}
-
-			if (*(start_p+7) == 0x0e)	// beacon packet
-			{
-				usbbuf_p = usbbuf_p + (start_p - usbbuf_p) + 25;	//move the pointer to check next packet
-			}
-
-			usbbuf_p++;
-
-			if(usbbuf_p - 1 == start_p)
-				break;
-
-			//if(usbbuf_p - usbbuf > 256)	//in case a bug
-				//break;
-
-			fprintf(fp, "while(start_p) %d!\n", usbbuf_p - usbbuf);
-			fflush(fp);
-
-			start_p = strstr((char*)usbbuf_p, (char*)start_mark);	//search next start_mark
-
-			//fprintf(fp, "usbbuf_p %d\n start_p %d \n", usbbuf_p, start_p);
-			//fflush(fp);
-
 		}
-
-		nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
 	}
+	else if(strcmp(name_req, "test/random") == 0)
+	{//random
+		//initial the tinyosndwsend_data
+		for(count = 0; count <500; count++)
+		{
+			strcpy((char*)tinyosndwsend_data->name, name_req_list[rand()%15]);	//fill the name
+			printf("%s\n", name_req_list[rand()%15]);
+
+			tinyosndwsend_data->type = NDW_DATA_TYPE_REQ;	//default
+			memcpy(test+11,tinyosndwsend_data,sizeof(*tinyosndwsend_data));	//fill the buf ,send to usb
+			crcres = crccal(test+1, sizeof(test)-4);	//calculate the crc value of "test"
+
+			test[sizeof(test)-3] = crcres;	//add the crc value to "test" packet
+			test[sizeof(test)-2] = crcres>>8; 
+
+			//printhex_macaddr(test, sizeof(test), " ");	//for debug
+			//printf("\n");
+
+			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
+			usleep(300000);	//wait for the data  us
+			tinyos_recv(fd1);
+
+			fprintf(fp, "Send count: %d\nRecv count %d\n", count, recv_count);
+			fflush(fp);
+		}
+	}
+	else
+	{//repeat
+		//initial the tinyosndwsend_data
+		strcpy((char*)tinyosndwsend_data->name, (char*)name_req);	//fill the name
+
+		tinyosndwsend_data->type = NDW_DATA_TYPE_REQ;	//default
+		memcpy(test+11,tinyosndwsend_data,sizeof(*tinyosndwsend_data));	//fill the buf ,send to usb
+		crcres = crccal(test+1, sizeof(test)-4);	//calculate the crc value of "test"
+
+		test[sizeof(test)-3] = crcres;	//add the crc value to "test" packet
+		test[sizeof(test)-2] = crcres>>8; 
+
+		//printhex_macaddr(test, sizeof(test), " ");	//for debug
+		//printf("\n");
+
+		nread = write(fd1, test, sizeof(test));	//send the first req
+
+		for(count = 0; count <500; count++)
+		{
+			usleep(300000);	//wait for the data  us
+			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
+			tinyos_recv(fd1);
+
+			fprintf(fp, "Send count: %d\nRecv count %d\n", count, recv_count);
+			fflush(fp);
+		}
+	}
+
+
+
 }
 
 
