@@ -10,6 +10,8 @@ Main function of NDW.
 
 #define T_NAME_LEN			12
 #define T_BUF_LEN			15
+#define SEND_COUNT			500
+#define SEND_INTERVAL_US	500000
 
 
 #include <stdlib.h>
@@ -209,8 +211,8 @@ tinyos_recv(int fd1)
 
 	memset(usbbuf,0,1024);
 	nread = read(fd1, usbbuf, 1024);//读USB串口
-	printhex_macaddr(usbbuf, nread, " ");
-	printf("\n");
+	//printhex_macaddr(usbbuf, nread, " ");
+	//printf("\n");
 	usbbuf_p = usbbuf;
 
 	//fprintf(fp, "nodecount loop %d!\n", nodecount);
@@ -230,20 +232,20 @@ tinyos_recv(int fd1)
 
 	while(start_p)
 	{
-		fprintf(fp, "got a pkt! len = %x\n", *(start_p+7));
-		fflush(fp);
+		//fprintf(fp, "got a pkt! len = %x\n", *(start_p+7));
+		//fflush(fp);
 
-		if (*(start_p+7) == 0x1c)	//a data packet coming, resolve it!
+		if ((*(start_p+7) == 0x1c)&&(*(start_p+6) == 0x00))	//a data packet coming, resolve it!
 		{
-			fprintf(fp, "got a pkt!\n");
-			fflush(fp);
+			//fprintf(fp, "got a pkt!\n");
+			//fflush(fp);
 			//printf("Resolve a 26 bytes pkt.\n");
 			//printhex_macaddr(start_p, 39, " ");
 			//printf("\n");
 
 			memcpy(tinyosndwrecv_data, start_p + 10, sizeof(*tinyosndwrecv_data));
 
-			if(tinyosndwrecv_data->type == NDW_DATA_TYPE_RSP)	//a DATA packet RSP
+			if((tinyosndwrecv_data->type == NDW_DATA_TYPE_RSP))	//a DATA packet RSP
 			{
 				printf("\n%s : %s\n\n", name_req, tinyosndwrecv_data->buf);
 				recv_count++;
@@ -266,13 +268,10 @@ tinyos_recv(int fd1)
 		//if(usbbuf_p - usbbuf > 256)	//in case a bug
 			//break;
 
-		fprintf(fp, "while(start_p) %d!\n", usbbuf_p - usbbuf);
-		fflush(fp);
+		//fprintf(fp, "while(start_p) %d!\n", usbbuf_p - usbbuf);
+		//fflush(fp);
 
 		start_p = strstr((char*)usbbuf_p, (char*)start_mark);	//search next start_mark
-
-		//fprintf(fp, "usbbuf_p %d\n start_p %d \n", usbbuf_p, start_p);
-		//fflush(fp);
 
 	}
 }
@@ -308,12 +307,13 @@ ndwd_run(char* name_req)
 	tinyosndwsend_data = (struct tinyosndw_data*) malloc(sizeof(*tinyosndwsend_data));
 
 	memset(tinyosndwsend_data,0,sizeof(*tinyosndwsend_data));
+	memset(tinyosndwsend_data->buf,0xff, 4);
 
 	if(strcmp(name_req, "test/turn") == 0)
 	{//turn
-		for(count = 0; count <500; count++)
+		for(count = 1; count <SEND_COUNT; count++)
 		{
-			strcpy((char*)tinyosndwsend_data->name, name_req_list[count%15]);	//fill the name
+			strcpy((char*)tinyosndwsend_data->name, (char*)name_req_list[count%15]);	//fill the name
 			printf("%s\n", name_req_list[count%15]);
 
 			tinyosndwsend_data->type = NDW_DATA_TYPE_REQ;	//default
@@ -327,20 +327,22 @@ ndwd_run(char* name_req)
 			//printf("\n");
 			
 			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
-			usleep(300000);	//wait for the data  us
+			usleep(SEND_INTERVAL_US);	//wait for the data  us
 			tinyos_recv(fd1);
+			printf("Send count: %d\n", count);
 
-			fprintf(fp, "Send count: %d\nRecv count %d\n", count, recv_count);
+			fprintf(fp, "Send count: %d Recv count %d\n", count, recv_count);
 			fflush(fp);
 		}
 	}
-	else if(strcmp(name_req, "test/random") == 0)
+	else if(strcmp(name_req, "test/rand") == 0)
 	{//random
 		//initial the tinyosndwsend_data
-		for(count = 0; count <500; count++)
+		for(count = 1; count <SEND_COUNT; count++)
 		{
-			strcpy((char*)tinyosndwsend_data->name, name_req_list[rand()%15]);	//fill the name
+			strcpy((char*)tinyosndwsend_data->name, (unsigned char*)name_req_list[rand()%15]);	//fill the name
 			printf("%s\n", name_req_list[rand()%15]);
+			//fflush(stdout);
 
 			tinyosndwsend_data->type = NDW_DATA_TYPE_REQ;	//default
 			memcpy(test+11,tinyosndwsend_data,sizeof(*tinyosndwsend_data));	//fill the buf ,send to usb
@@ -353,10 +355,11 @@ ndwd_run(char* name_req)
 			//printf("\n");
 
 			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
-			usleep(300000);	//wait for the data  us
+			usleep(SEND_INTERVAL_US);	//wait for the data  us
 			tinyos_recv(fd1);
+			printf("Send count: %d\n", count);
 
-			fprintf(fp, "Send count: %d\nRecv count %d\n", count, recv_count);
+			fprintf(fp, "Send count: %d Recv count %d\n", count, recv_count);
 			fflush(fp);
 		}
 	}
@@ -372,18 +375,19 @@ ndwd_run(char* name_req)
 		test[sizeof(test)-3] = crcres;	//add the crc value to "test" packet
 		test[sizeof(test)-2] = crcres>>8; 
 
-		//printhex_macaddr(test, sizeof(test), " ");	//for debug
-		//printf("\n");
+		printhex_macaddr(test, sizeof(test), " ");	//for debug
+		printf("\n");
 
 		nread = write(fd1, test, sizeof(test));	//send the first req
 
-		for(count = 0; count <500; count++)
+		for(count = 1; count <SEND_COUNT; count++)
 		{
-			usleep(300000);	//wait for the data  us
+			usleep(SEND_INTERVAL_US);	//wait for the data  us
 			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
 			tinyos_recv(fd1);
+			printf("Send count: %d\n", count);
 
-			fprintf(fp, "Send count: %d\nRecv count %d\n", count, recv_count);
+			fprintf(fp, "Send count: %d\tRecv count %d\n", count, recv_count);
 			fflush(fp);
 		}
 	}
