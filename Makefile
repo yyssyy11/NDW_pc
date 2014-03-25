@@ -19,8 +19,9 @@ TARGET  = ndw_main
 
 all: $(TARGET)
 
-ndw_main: ndw_main.o 
-	$(CC) -Wall -o $@ ndw_main.o
+ndw_main: ndw_main.o ndw_main.c
+#$(CC) -Wall -o -lpthread $@ ndw_main.o
+	gcc ndw_main.c -o ndw_main -lpthread
 	
 
 clean:
