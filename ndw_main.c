@@ -11,7 +11,7 @@ Main function of NDW.
 #define T_NAME_LEN			12
 #define T_BUF_LEN			15
 #define SEND_COUNT			500
-#define SEND_INTERVAL_US	500000
+#define SEND_INTERVAL_US	1000000
 
 
 #include <stdlib.h>
@@ -213,10 +213,10 @@ void *tinyos_recv(void *args)
 
 	for(;;)
 	{
-		usleep(100000);	//wait for the data  us
+		usleep(50000);	//wait for the data  us
 		memset(usbbuf,0,1024);
 		nread = read(fd1, usbbuf, 1024);//读USB串口
-		printhex_macaddr(usbbuf, nread, " ");
+		//printhex_macaddr(usbbuf, nread, " ");
 		//printf("\n");
 		usbbuf_p = usbbuf;
 
