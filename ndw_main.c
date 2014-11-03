@@ -398,7 +398,7 @@ ndwd_run(char* name_req)
 			usleep(SEND_INTERVAL_US);	//wait for the data  us
 			nread = write(fd1, test, sizeof(test));	// no result in 300ms, send the REQ again.
 			//tinyos_recv(fd1);
-			printf("Send count: %d\n", count);
+			//printf("Send count: %d\n", count);
 
 			fprintf(fp, "Send count: %d\tRecv count %d\n", count, recv_count);
 			fflush(fp);
@@ -455,6 +455,7 @@ main(int argc, char **argv)
 
 	fprintf(fp, "\n\n%s\nndw_main started!\n", argv[1]);
 	fflush(fp);
+
 
 	strcpy((char*)name_req, (char*)argv[1]);
 	//printf("%s\n", name_req);
