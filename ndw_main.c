@@ -301,7 +301,7 @@ ndwd_run(char* name_req)
 
 	recv_count = 0;
 
-	fd1 = open("/dev/ttyUSB0", O_RDWR|O_NONBLOCK);//打开串口
+	fd1 = open("/dev/ttyUSB0", O_RDWR|O_NONBLOCK);//打开串口 
 	if (fd1 == -1)
 		exit(3);
 
